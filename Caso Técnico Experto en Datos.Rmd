@@ -1,0 +1,298 @@
+---
+title: "Crack the Code - Caso Técnico Experto en Datos"
+author: "Luis Barajas"
+date: "2024-01-02"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Este script presenta un análisis exploratorio de datos como parte de la prueba técnica para el cargo de consultor experto en data de Crack The Code. El tema seleccionado es Data Scientist Salaries.
+
+### ¿Por qué explorar el comportamiento de los salarios en la industria de Data Science?
+
+Durante los últimos años la adquicisión de competencias asociadas a Data Science y Data Analytics, ha adquirido una gran relevancia para todas las industrias. Las empresas en general tienden a acumular grandes cantidades de información estructurada y no estructurada, que hacen necesaria la existencia de personal cualificado en el manejo de datos para la optimización de múltiples procesos. Esto incluye la identificación de patrones en los datos que permiten hacer un mejor diagnóstico de problemas, el cálculo de correlaciones, la ejecución de ejercicios de causalidad que permitan explicar fenómenos a partir de la relación existente entre múltiples variables y la ejecución de ejercicios de predicción o clasificación que contribuyan a una mejor toma de decisiones.
+
+En ese sentido se hace importante analizar el comportamiento de los salarios en la industria de data science. Esto con el objetivo de identificar si esta es verdaderamente una industria en crecimiento, así como también las diferencias que pueden existir en términos salariales al considerar variables como el nivel de experiencia, el grado de presencialidad o incluso la ubicación geográfica de las plazas laborales. 
+
+Con el objetivo de llevar a cabo este análisis, para este ejercicio se seleccionó la base de datos [2023 Data Scientists Salary](https://www.kaggle.com/datasets/henryshan/2023-data-scientists-salary) disponible en Kaggle.com, la cual cuenta con 3755 registros de trabajadores de la industria alrededor del mundo, capturados a lo largo de los últimos cuatro años.
+
+Los features incluidos dentro de la base de datos son:
+
+**Año:** Año en el que se pagó el salario.<br>
+**Experiencia:** Nivel de experiencia del trabajador: Junior, Intermediate, Expert, Director.<br>
+**Tipo de empleo:** Part-time, Full-time, Contract, Freelance.<br>
+**Cargo:** Rol del trabajador en la empresa.<br>
+**Salario:** Remuneración bruta en moneda local.<br>
+**Moneda Local:** Denominación de la remuneración.<br>
+**Salario en USD:** Remuneración en dólares.<br>
+**País de residencia:** Lugar de residencia del trabajador.<br>
+**Trabajo remoto:** Cantidad de tiempo de trabajo desarrollada de manera remota.<br>
+**Ubicación compañía:** País en el que la casa matriz de la empresa reportada está ubicada.<br>
+**Tamaño compañía:** Número medio de personas que trabajaron en la compañía en el año de reporte.<br>
+
+
+**Nota:** Es importante tener en cuenta que este ejercicio tiene fines pedagógicos en términos de uso práctico que se le puede dar a la base de datos seleccionada; así como también que el análisis de datos salariales con fines comparativos requiere considerar aspectos adicionales como la Paridad del Poder Adquisitivo, la inflación, entre otros aspectos.
+
+
+```{r, include=FALSE}
+# Borrar todo
+
+rm(list = ls())
+
+# Liberías y directorio de trabajo
+
+suppressMessages(library(dplyr)) # Paquete para manipulación de datos
+suppressMessages(library(magrittr)) # Paquete para manipulación de datos
+suppressMessages(library(stringr)) # Paquete para manipulación de texto
+suppressMessages(library(tidyr)) # Paquete para manipulación de datos
+suppressMessages(library(naniar)) # Paquete para manipulación de missing data
+suppressMessages(library(psych)) # Paquete para generación de descriptivos
+suppressMessages(library(kableExtra)) # Paquete para generación de tablas
+suppressMessages(library(ggplot2)) # Paquete para graficación
+
+setwd("/Users/luchobarajas/Documents/Crack the Code /Caso Experto en Datos/")
+
+# Carga de bases de datos
+
+ds_salaries = read.csv2("ds_salaries.csv", sep = ",")
+ISO = read.csv("~/Documents/Datos/Clasificaciones/ISO Country Code.csv", sep=";")
+
+# Renombrar variables en la base de datos para mayor legibilidad
+
+ds_salaries %<>% select(Año = work_year,"Experiencia"= experience_level,
+                        "Tipo de empleo"= employment_type, Cargo = job_title, Salario = salary,
+                        "Moneda local" = salary_currency, "Salario en USD" = salary_in_usd, "País residencia" = employee_residence,
+                        "Trabajo remoto" = remote_ratio,"Ubicación Compañía" = company_location, "Tamaño Compañía"= company_size)
+
+
+# Renombrar categorías
+
+ds_salaries %<>% mutate(Experiencia = if_else(Experiencia == "EN", "Junior",
+                                                        if_else(Experiencia == "EX", "Director",
+                                                                if_else(Experiencia == "MI", "Intermediate", "Expert")))) 
+
+ds_salaries$Experiencia %<>% factor
+
+ds_salaries %<>% mutate(`Tamaño Compañía` = if_else(`Tamaño Compañía` == "L", "Grande",
+                                                     if_else(`Tamaño Compañía` == "S", "Pequeña", "Mediana")))
+
+ds_salaries %<>% mutate(`Tipo de empleo` = if_else(`Tipo de empleo` == "CT", "Contract",
+                                                     if_else(`Tipo de empleo` == "FT", "Full-Time",
+                                                     if_else(`Tipo de empleo` == "FL", "Freelance", "Part-Time"))))
+
+```
+
+### Análisis exploratorio de datos
+
+A. **Missing Values:** Con el objetivo de determinar la calidad de la base de datos seleccionada, inicialmente se realiza una identificación de missign values o valores faltantes, lo que permite hacer una aproximación al nivel de precisión que puede tener cualquier análisis que se genere a partir de la base. Esto debido a que una base de datos con multiples valores faltantes puede inducir a conclusiones sesgadas o análisis que no reflejan la realidad de las unidades de observación, lo cual puede afectar tanto las etapas asociadas al análsis descriptivo de los datos, como también aquellas asociada a modelación y predicción.
+
+El análisis de valores faltantes presentado en el gráfico 1 muestra que todas las variables cuentan con un total de 3.755 observaciones, lo que quiere decir que la base de datos está completa y no registra valores faltantes. En el caso de existir valores faltantes, el gráfico mostraría para cada una de las variables una barra horizontal en cada punto del 0 al 3755 en el que se encuentra el dato faltante.
+
+#### Missing Values - Valores Faltantes
+
+```{r, echo=FALSE}
+missing = table(is.na(ds_salaries))
+vis_miss(ds_salaries)
+```
+
+**Duplicados**
+
+Una vez realizado el chequeo de duplicados, se encuentra que la base cuenta con **1715** filas completamente duplicadas; no obstante, teniendo en cuenta que existe la posibilidad de que estos registros efectivamente pertenezcan a diferentes personas (misma posición, misma empresa) y que no se cuenta con información adicional para afirmar que los datos de estas filas corresponden a la misma persona, se decide realizar el análisis con la base completa. 
+
+```{r, include=FALSE}
+filas_duplicadas <- duplicated(ds_salaries) | duplicated(ds_salaries, fromLast = TRUE)
+
+# Mostrar las filas duplicadas (si las hay)
+if (any(filas_duplicadas)) {
+  cat("Las siguientes filas están completamente duplicadas:\n")
+  print(nrow(ds_salaries[filas_duplicadas, ]))
+} else {
+  cat("No hay filas completamente duplicadas.\n")
+}
+```
+
+
+
+
+#### Estadísticas Descriptivas
+
+**a. Variables numéricas**
+
+Para el cálculo de las estadísticas descriptivas se seleccionaron únicamentre las variables númericas de la base. Se excluye el salario en moneda local, dado que la variable que permite comparabilidad es el Salario en USD. De manera general se encuentra que si bien la base de datos cuenta con registros desde 2020 a 2023, la mayoría de los registros corresponden a 2022. Por otra parte, las estadísticas descriptivas indican que el ingreso promedio de una persona que se dedica a los temas relacionados con Data Science es de 137570 USD por año con un mínimo de 5131 USD y un máximo de 450.000 USD por año.
+
+Adicionalmente, la variable *Trabajo Remoto* muestra que en promedio un 46.3 % de las actividades se realizan de manera remota, lo que implica que la mitad de las personas dedicadas a temas relacionados con Data Science lo hacen desde casa o lugares distintos al punto de trabajo.
+
+```{r,echo=FALSE}
+# Calculando estadísticas descriptivas para todas las variables numéricasa de de la base de datos
+descriptives = ds_salaries %>% select(Año,`Salario en USD`, `Trabajo remoto`)  %>% describe() 
+kable(descriptives, format = "html", digits = 2) %>%
+  kable_styling()
+```
+
+**b. Comportamiento de los salarios**
+
+**Salario promedio anual**
+
+Ahora bien, al analizar el comportamiento de los salarios por año, se evidencia que durante los últimos años el salario promedio de las personas  dedicadas a data science se ha incrementado. El mayor aumento se registra entre 2021 y 2022, en donde el salario promedio aumentó de 94.087 USD a 133.339 USD; no obstante, es importante considerar que este comportamiento se puede atribuir a una mayor disponibilidad de datos para la vigencia 2022 con relación a periodos anteriores. Adicionalmente se debe tener en cuenta que el comportamiento de los salarios puede variar dependiendo de algunos aspectos como los años de experiencia, el tipo de empleo, el cargo y el país de residencia entre otros.
+
+```{r,echo=FALSE, warning=FALSE}
+
+custom_format <- function(x) {
+  format(x, scientific = FALSE)}
+  
+ggplot(ds_salaries) +
+  aes(x = "", y = `Salario en USD`, fill = Año, group = Año) +
+  geom_violin(adjust = 1L, scale = "area") +
+  scale_fill_viridis_c(option = "viridis", direction = 1) +
+  theme(legend.position = "bottom")+ scale_y_continuous(labels = custom_format)+
+labs(title="Evolución del Salario en USD Promedio",
+        caption = c("Kaggle - 2023 Data Scientists Salary", "Elaboración: @luchobarajas_"),
+        colour ="") +
+  theme(panel.background = element_blank(),
+        axis.title.x = element_blank(),
+        axis.title.y = element_text(size = 10),
+        legend.position = "bottom",
+        plot.title = element_text(hjust = 0.5, size =15),
+        plot.subtitle = element_text(hjust = 0.5),
+        plot.caption.position = "plot",
+        plot.caption = element_text(hjust=c(0,1), size = 10),axis.text = element_text(size = 10), 
+        legend.text = element_text(size = 8)) 
+```
+
+**Salarios por años de experiencia y tipo de empleo**
+
+Por otra parte, al evaluar el comportamiento de los salarios por años de experiencia se encuentra que según como lo indica la teoría, a mayor cantidad de años de experiencia mayor es la remuneración. El gráfico 3 muestra que en promedio las personas con nivel directivo tienden a ganar más que las demás categorías, seguidas por las de nivel experto, las de nivel intermedio y finalmente de las personas en posiciones junior o "éntry level". Ahora bien, llama la atención que en los niveles "intermediate" y "expert" hay varios datos atípicos que revelan la presencia de personas en la base de datos que tienen un salario mayor al de muchos directivos. 
+
+```{r, echo=FALSE, warning=FALSE}
+
+ggplot(ds_salaries) +
+  aes(
+    x = Experiencia,
+    y = `Salario en USD`,
+    fill = Experiencia
+  ) +
+  geom_boxplot() +
+  scale_fill_viridis_d(option = "viridis", direction = 1, alpha = 0.9) +
+  theme(legend.position = "bottom")+ scale_y_continuous(labels = custom_format)+
+labs(title="Salario en USD Promedio por nivel de experiencia",
+        caption = c("Kaggle - 2023 Data Scientists Salary", "Elaboración: @luchobarajas_"),
+        colour ="") +
+  theme(panel.background = element_blank(),
+        axis.title.x = element_blank(),
+        axis.title.y = element_text(size = 10),
+        legend.position = "bottom",
+        plot.title = element_text(hjust = 0.5, size =15),
+        plot.subtitle = element_text(hjust = 0.5),
+        plot.caption.position = "plot",
+        plot.caption = element_text(hjust=c(0,1), size = 10),axis.text = element_text(size = 10), 
+        legend.text = element_text(size = 8))
+```
+
+**Salario por tipo de presencialidad**
+
+En términos del tipo de presencialidad, los datos revelan de manera general que la población que trabaja remotamente de manera parcial son los que reciben una menor remuneración, dado que tienden a concentrarse en la cola izquierda de la distribución de acuerdo con los rangos salariales. En el caso del trabajo 100 % remoto y 100 % presencial el comportamiento el salario tiende a tener un comportamiento similar; no obstante se puede percibir que las personas que trabajan en modalidad remota tienden a ganar un poco más que las que trabajan en presencialidads total. 
+
+```{r, echo=FALSE, warning=FALSE}
+ggplot(ds_salaries) +
+  aes(
+    x = `Salario en USD`,
+    fill = `Trabajo remoto`,
+    group = `Trabajo remoto`
+  ) +
+  geom_density(adjust = 1L) +
+  scale_fill_viridis_c(option = "viridis", direction = 1, alpha = 0.6)  +
+  scale_x_continuous(labels = custom_format)+
+labs(title="Salario en USD por tipo de presencialidad",
+        caption = c("Kaggle - 2023 Data Scientists Salary", "Elaboración: @luchobarajas_"),
+        colour ="") +
+  theme(panel.background = element_blank(),
+        axis.title.x = element_blank(),
+        axis.title.y = element_text(size = 10),
+        legend.position = "bottom",
+        plot.title = element_text(hjust = 0.5, size =15),
+        plot.subtitle = element_text(hjust = 0.5),
+        plot.caption.position = "plot",
+        plot.caption = element_text(hjust=c(0,1), size = 10),axis.text = element_text(size = 10), 
+        legend.text = element_text(size = 8))
+```
+
+**Salarios por región**
+
+Con el objetivo de contar con un componente regional al análisis, a la base original seleccionada se le añadió una columna que indica el continente al cual pertenece cada país de residencia. Esto se hizo utilizando una base complementaria que contiene los códigos ISO2 de cada país. A partir de ello se identifica de manera general que en todas las categorías de años de experiencia los salarios de personas vinculadas a trabajos de Data Science, tienden a ser mayores en América con un promedio de 150.916 USD por año, seguido de Europa y Oceanía con valores que superan los 74.500 USD. El salario promedio en Asia y África es el menor con 50.000 USD aproximadamente. Ahora bien, es importante mencionar, que del total de observaciones de América, más de un 95% corresponde a Estados Unidos, por lo que los datos podrían cambiar si la base contara con más información de los demás países. 
+
+```{r, include=FALSE}
+
+ISO %<>% select("País residencia" = ISO..2., Continente = Continent )
+ds_salaries %<>% left_join(ISO)
+ds_salaries %<>% mutate(Continente = if_else(`País residencia` == "HK", "Asia", 
+                                              if_else(`País residencia`== "JE", "Europe",
+                                              if_else(`País residencia` == "RS", "Europe",
+                                              if_else(`País residencia` == "HK", "Europe", ds_salaries$Continente)))))
+```
+
+```{r, echo=FALSE, warning=FALSE}
+ggplot(ds_salaries) +
+  aes(
+    x = "",
+    y = `Salario en USD`,
+    fill = Experiencia
+  ) +
+  geom_boxplot() +
+  scale_fill_viridis_d(option = "viridis", direction = 1)  +
+  facet_wrap(vars(Continente)) +
+labs(title="Salario en USD promedio según nivel de experiencia por continente ",
+        caption = c("Kaggle - 2023 Data Scientists Salary", "Elaboración: @luchobarajas_"),
+        colour ="") + scale_y_continuous(labels = custom_format)+
+  theme(panel.background = element_blank(),
+        axis.title.x = element_blank(),
+        axis.title.y = element_text(size = 10),
+        legend.position = "bottom",
+        plot.title = element_text(hjust = 0.5, size =15),
+        plot.subtitle = element_text(hjust = 0.5),
+        plot.caption.position = "plot",
+        plot.caption = element_text(hjust=c(0,1), size = 10),axis.text = element_text(size = 10), 
+        legend.text = element_text(size = 8))
+
+
+
+
+```
+
+```{r, include=FALSE}
+ds_salaries %>% filter(Continente == "Americas") %>% group_by(`País residencia`)%>% summarise(Total = n())
+```
+
+**Salarios según tamaño de la empresa**
+
+Finalmente, al segmentar los datos por tamaño de la compañía se encuentra que los salarios tienden a ser mayores en las compañíaas de tamaño mediano, así como también que estás son las empresas que cuentan con mayor concentración de trabajadores en áreas asociadas a data science. 
+
+```{r, echo=FALSE, warning=FALSE}
+ggplot(ds_salaries) +
+  aes(
+    x = `Tamaño Compañía`,
+    y = `Salario en USD`,
+    fill = `Tamaño Compañía`
+  ) +
+  geom_violin(adjust = 1L, scale = "count") +
+  geom_jitter(height = 0.25, alpha = 0.4) +
+  scale_fill_viridis_d(option = "viridis", direction = 1) +
+labs(title="Salario por tamaño de compañía ",
+        caption = c("Kaggle - 2023 Data Scientists Salary", "Elaboración: @luchobarajas_"),
+        colour ="") + scale_y_continuous(labels = custom_format)+
+  theme(panel.background = element_blank(),
+        axis.title.x = element_blank(),
+        axis.title.y = element_text(size = 10),
+        legend.position = "bottom",
+        plot.title = element_text(hjust = 0.5, size =15),
+        plot.subtitle = element_text(hjust = 0.5),
+        plot.caption.position = "plot",
+        plot.caption = element_text(hjust=c(0,1), size = 10),axis.text = element_text(size = 10), 
+        legend.text = element_text(size = 8))
+```
+```{r, include=FALSE}
+write.csv(ds_salaries,"ds_salaries_final.csv") # Guardando base final
+```
+
